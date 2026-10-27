@@ -578,12 +578,40 @@ private struct HourChart: View {
     }
 }
 
+/// Reports the mouse position in top-left based coordinates, or nil when it leaves. Uses an `.activeAlways`
+/// tracking area so it works while another app is frontmost; clicks pass through.
+private struct MouseTracker: NSViewRepresentable {
+    let onMove: (CGPoint?) -> Void
+
+    func makeNSView(context: Context) -> TrackingView { TrackingView() }
+    func updateNSView(_ view: TrackingView, context: Context) { view.onMove = onMove }
+
+    final class TrackingView: NSView {
+        var onMove: ((CGPoint?) -> Void)?
+
+        override var isFlipped: Bool { true }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                           owner: self))
+        }
+
+        override func mouseMoved(with event: NSEvent) { onMove?(convert(event.locationInWindow, from: nil)) }
+        override func mouseEntered(with event: NSEvent) { onMove?(convert(event.locationInWindow, from: nil)) }
+        override func mouseExited(with event: NSEvent) { onMove?(nil) }
+    }
+}
+
 /// GitHub-style contribution grid. Hover a cell for its date and total.
 private struct Heatmap: View {
     let stats: FocusStats
     private let cellSize: CGFloat = 12
     private let gap: CGFloat = 3
     private let labelWidth: CGFloat = 28
+    @State private var hovered: DayTotal?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -595,6 +623,13 @@ private struct Heatmap: View {
             }
             .frame(height: 7 * cellSize + 6 * gap)
             HStack(spacing: 4) {
+                if let hovered {
+                    (Text(Dates.iso.string(from: hovered.day)).foregroundColor(Theme.text)
+                        + Text(" · ").foregroundColor(Theme.dim)
+                        + Text(hovered.seconds == 0 ? "no focus" : Format.hoursMinutes(hovered.seconds))
+                            .foregroundColor(hovered.seconds == 0 ? Theme.dim : Theme.accent))
+                        .font(Theme.mono(9))
+                }
                 Spacer()
                 Text("LESS").font(Theme.mono(8)).foregroundColor(Theme.dim)
                 ForEach(0..<5, id: \.self) { level in
@@ -602,6 +637,7 @@ private struct Heatmap: View {
                 }
                 Text("MORE").font(Theme.mono(8)).foregroundColor(Theme.dim)
             }
+            .frame(height: 12) // the hover readout must not change the panel's height
         }
     }
 
@@ -624,6 +660,17 @@ private struct Heatmap: View {
                 }
             }
         }
+        // SwiftUI's onHover (and .help) only fire while the app is active; this tracker works in the background too.
+        .overlay {
+            MouseTracker { point in
+                hovered = point.flatMap { point in
+                    let column = Int((point.x - labelWidth) / (cellSize + gap))
+                    let row = Int(point.y / (cellSize + gap))
+                    guard point.x >= labelWidth, grid.indices.contains(column), (0..<7).contains(row) else { return nil }
+                    return grid[column][row]
+                }
+            }
+        }
     }
 
     private func cell(_ day: DayTotal?, maxSeconds: Int) -> some View {
@@ -631,12 +678,13 @@ private struct Heatmap: View {
         return RoundedRectangle(cornerRadius: 2)
             .fill(level < 0 ? Color.clear : color(level: level))
             .overlay {
-                if day?.day == stats.today {
+                if day != nil, day?.day == hovered?.day {
+                    RoundedRectangle(cornerRadius: 2).stroke(Theme.amber, lineWidth: 1.5)
+                } else if day?.day == stats.today {
                     RoundedRectangle(cornerRadius: 2).stroke(Theme.text.opacity(0.7), lineWidth: 1)
                 }
             }
             .frame(width: cellSize, height: cellSize)
-            .help(day.map { "\(Dates.iso.string(from: $0.day)) · \(Format.hoursMinutes($0.seconds))" } ?? "")
     }
 
     private func color(level: Int) -> Color {
