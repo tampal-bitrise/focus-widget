@@ -324,7 +324,7 @@ private struct StatsView: View {
                 Panel("DAILY OUTPUT", trailing: "LAST 30 DAYS · HOURS") { DailyChart(stats: stats) }
                     .frame(maxWidth: .infinity)
                     .layoutPriority(1)
-                Panel("CLOCK PROFILE", trailing: "MINUTES BY HOUR") { HourChart(stats: stats) }
+                Panel("CLOCK PROFILE", trailing: "LAST 30 DAYS · MINUTES") { HourChart(stats: stats) }
                     .frame(width: 380)
             }
             .frame(maxHeight: .infinity)
@@ -547,12 +547,13 @@ private struct HourChart: View {
     let stats: FocusStats
 
     var body: some View {
-        let peak = stats.peakHour
+        let hours = stats.secondsByHour(last: 30)
+        let peak = hours.contains { $0 > 0 } ? hours.indices.max { hours[$0] < hours[$1] } : nil
         Chart {
             ForEach(0..<24, id: \.self) { hour in
                 BarMark(
                     x: .value("Hour", String(format: "%02d", hour)),
-                    y: .value("Minutes", Double(stats.secondsByHour[hour]) / 60)
+                    y: .value("Minutes", Double(hours[hour]) / 60)
                 )
                 .foregroundStyle(hour == peak ? Theme.amber : Theme.cyan.opacity(0.6))
                 .cornerRadius(1.5)

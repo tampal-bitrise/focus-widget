@@ -109,6 +109,9 @@ withStore("stats") { store, _ in
     check(stats.peakHour == 9 && stats.peakWeekday == 1, "peak hour and weekday")
     check(stats.deepSessionCount == 3 && stats.longestSession?.tag == "coding", "deep work and longest")
     check(stats.averageSessionSeconds == 2775, "average session")
+    check(stats.secondsByHour(last: 3)[14] == 3300 && stats.secondsByHour(last: 3)[0] == 1800
+          && stats.secondsByHour(last: 3)[9] == 0 && stats.secondsByHour(last: 3)[23] == 0,
+          "hour histogram over recent days")
     check(stats.dailyTotals(last: 4).map(\.seconds) == [5400, 5100, 0, 600], "daily totals include empty days")
     check(stats.seconds(from: at(day: 1, 0), to: at(day: 3, 0)) == 5100, "seconds in range")
 

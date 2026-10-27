@@ -25,6 +25,8 @@ public struct FocusStats {
     public let secondsByDay: [Date: Int]
     /// Index 0...23 = local hour of day.
     public let secondsByHour: [Int]
+    /// Hour-of-day histogram per day, keyed like `secondsByDay`.
+    public let secondsByDayHour: [Date: [Int]]
     /// Index 0...6 = `Calendar.component(.weekday) - 1`, so 0 is Sunday.
     public let secondsByWeekday: [Int]
     /// Largest first.
@@ -40,6 +42,7 @@ public struct FocusStats {
         var total = 0
         var byDay: [Date: Int] = [:]
         var byHour = [Int](repeating: 0, count: 24)
+        var byDayHour: [Date: [Int]] = [:]
         var byWeekday = [Int](repeating: 0, count: 7)
         var byTag: [String: Int] = [:]
         var longest: Session?
@@ -64,8 +67,10 @@ public struct FocusStats {
             while t < end {
                 let next = min(end, calendar.dateInterval(of: .hour, for: t)?.end ?? end)
                 let slice = Int(next.timeIntervalSince(t))
-                byDay[calendar.startOfDay(for: t), default: 0] += slice
-                byHour[calendar.component(.hour, from: t)] += slice
+                let day = calendar.startOfDay(for: t), hour = calendar.component(.hour, from: t)
+                byDay[day, default: 0] += slice
+                byHour[hour] += slice
+                byDayHour[day, default: [Int](repeating: 0, count: 24)][hour] += slice
                 byWeekday[calendar.component(.weekday, from: t) - 1] += slice
                 t = next
             }
@@ -75,6 +80,7 @@ public struct FocusStats {
         totalSeconds = total
         secondsByDay = byDay.filter { $0.value > 0 }
         secondsByHour = byHour
+        secondsByDayHour = byDayHour
         secondsByWeekday = byWeekday
         tags = byTag.map { TagTotal(tag: $0.key, seconds: $0.value) }
             .sorted { $0.seconds != $1.seconds ? $0.seconds > $1.seconds : $0.tag < $1.tag }
@@ -104,6 +110,16 @@ public struct FocusStats {
             let day = self.day(byAdding: -back, to: today)
             return DayTotal(day: day, seconds: secondsByDay[day] ?? 0)
         }
+    }
+
+    /// Hour-of-day histogram over the last `count` days, ending today.
+    public func secondsByHour(last count: Int) -> [Int] {
+        let from = day(byAdding: -(count - 1), to: today)
+        var hours = [Int](repeating: 0, count: 24)
+        for (day, byHour) in secondsByDayHour where day >= from && day <= today {
+            for hour in 0..<24 { hours[hour] += byHour[hour] }
+        }
+        return hours
     }
 
     /// Consecutive days with focus, ending today, or ending yesterday if nothing has been logged today yet.
