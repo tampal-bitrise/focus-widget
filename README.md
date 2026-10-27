@@ -56,3 +56,6 @@ Default location:
 ```
 ~/Library/Application Support/FocusWidget/focus.sqlite
 ```
+
+Override with the `FOCUS_WIDGET_DB` environment variable (used for the smoke test, or to keep the
+file in a synced folder).
